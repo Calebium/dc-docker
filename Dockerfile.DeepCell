@@ -1,14 +1,28 @@
+# Light-weight Dockerfile for DeepCell
+
+# Modified from the original DeepCell Dockerfile by David Van Valen.
+# Major changes include:
+#
+# (1) No longer including the DeepCell code base from GitHub. The
+#     code (and image data) will be accessed through a shared volume
+#     when the docker instance launches
+# (2) Instead of creating a Python 2.7.4 virtualenv using pyenv for
+#     the DeepCell directory, the entire docker instance will use
+#     Python 2.7.4
+# (3) The docker instance will no longer launch the Jupyter notebook
+#     when started, since docker images built with older versions of
+#     Jupyter opens up the HTTP port for world access without the
+#     requirement for tokens or passwords, creating a security risk
+#     (e.g. from crypto mining)
+
 # GitHub:    https://github.com/CovertLab/DeepCell
+#            https://github.com/Calebium/DeepCell
 # DockerHub: https://hub.docker.com/r/vanvalen/deepcell/
 # SimTK:     https://simtk.org/projects/deepcell
 
-# To run the Jupyter Notebooks, execute the command:
-# "sudo nvidia-docker run -it -p 9999:9999 deepcell"
-# and open a web browser to localhost:9999
-
 FROM nvidia/cuda:8.0-cudnn5-devel
 
-MAINTAINER David Van Valen
+LABEL maintainer Caleb Chan
 
 ENV HOME /root
 ENV PYENV_ROOT /root/.pyenv
@@ -16,36 +30,52 @@ ENV PATH /root/.pyenv/shims:/root/.pyenv/bin:/usr/local/sbin:/usr/local/bin:/usr
 
 WORKDIR $HOME
 
-RUN apt-get -y update && apt-get install -y git curl g++ make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev
+# Added pip to the list of packages for upgrading since there were intermittent failures
+# when installing libtiff (ImportError: No module named six)
+RUN apt-get -y update && apt-get install -y python-pip git curl g++ make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev
 
 RUN curl -L https://raw.githubusercontent.com/yyuu/pyenv-installer/master/bin/pyenv-installer | bash
-
 RUN CONFIGURE_OPTS=--enable-shared pyenv install 2.7.4
 
-RUN git clone https://github.com/CovertLab/DeepCell.git
+# The code will no longer be cloned from GitHub and integrated into the docker instance.
+# Instead, we will used a shared volume to allow the docker instance access to the code,
+# which we can maintain with Git and GitHub
+#RUN git clone https://github.com/CovertLab/DeepCell.git
+#WORKDIR $HOME/DeepCell
 
-WORKDIR $HOME/DeepCell
+# The original script creates a virtualenv called DeepCell in the DeepCell directory and
+# set the Python environment to 2.7.4. Instead, we will just set the entire docker
+# instance to use Python 2.7.4
+#RUN pyenv local 2.7.4
+#RUN pyenv virtualenv DeepCell
+#RUN pyenv local DeepCell
 
-RUN pyenv local 2.7.4
-
-RUN pyenv virtualenv DeepCell
-
-RUN pyenv local DeepCell
+RUN pyenv global 2.7.4
 
 RUN pip install numpy
-
 RUN pip install scipy
-
 RUN pip install scikit-learn scikit-image matplotlib palettable libtiff tifffile h5py ipython[all]
-
 RUN pip install --upgrade --no-deps git+git://github.com/Theano/Theano.git
-
 RUN pip install keras pywavelets mahotas
 
 RUN mkdir $HOME/.keras && echo '{"image_dim_ordering": "th", "epsilon": 1e-07, "floatx": "float32", "backend": "theano"}' >> $HOME/.keras/keras.json
 
 RUN echo '[global]\ndevice = gpu\nfloatX = float32' > $HOME/.theanorc
 
-WORKDIR $HOME/DeepCell/keras_version
+# Set up notebook config
+COPY jupyter_notebook_config.py /root/.jupyter/
 
-CMD jupyter notebook --port 9999 --no-browser --ip=*
+# Create symbolic link to point to Jupyter kernels (however, this directory will not be
+# created until Jupyter is run for the first time)
+RUN ln -s /root/.local/share/jupyter/runtime/ jkernels
+
+# Since the code and data will be made available to the docker instance through shared
+# volumes, we will just start at the $HOME directory
+#WORKDIR $HOME/DeepCell/keras_version
+WORKDIR $HOME
+
+# Instead of launching the Jupyter notebook every time we start the docker instance, we
+# simply launch into a shell, and allow the flexibility of whether to launch the Jupyter
+# notebook from within the instance
+#CMD jupyter notebook --port 9999 --no-browser --ip=*
+CMD /bin/bash
