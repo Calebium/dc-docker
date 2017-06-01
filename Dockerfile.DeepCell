@@ -1,0 +1,51 @@
+# GitHub:    https://github.com/CovertLab/DeepCell
+# DockerHub: https://hub.docker.com/r/vanvalen/deepcell/
+# SimTK:     https://simtk.org/projects/deepcell
+
+# To run the Jupyter Notebooks, execute the command:
+# "sudo nvidia-docker run -it -p 9999:9999 deepcell"
+# and open a web browser to localhost:9999
+
+FROM nvidia/cuda:8.0-cudnn5-devel
+
+MAINTAINER David Van Valen
+
+ENV HOME /root
+ENV PYENV_ROOT /root/.pyenv
+ENV PATH /root/.pyenv/shims:/root/.pyenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin
+
+WORKDIR $HOME
+
+RUN apt-get -y update && apt-get install -y git curl g++ make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev
+
+RUN curl -L https://raw.githubusercontent.com/yyuu/pyenv-installer/master/bin/pyenv-installer | bash
+
+RUN CONFIGURE_OPTS=--enable-shared pyenv install 2.7.4
+
+RUN git clone https://github.com/CovertLab/DeepCell.git
+
+WORKDIR $HOME/DeepCell
+
+RUN pyenv local 2.7.4
+
+RUN pyenv virtualenv DeepCell
+
+RUN pyenv local DeepCell
+
+RUN pip install numpy
+
+RUN pip install scipy
+
+RUN pip install scikit-learn scikit-image matplotlib palettable libtiff tifffile h5py ipython[all]
+
+RUN pip install --upgrade --no-deps git+git://github.com/Theano/Theano.git
+
+RUN pip install keras pywavelets mahotas
+
+RUN mkdir $HOME/.keras && echo '{"image_dim_ordering": "th", "epsilon": 1e-07, "floatx": "float32", "backend": "theano"}' >> $HOME/.keras/keras.json
+
+RUN echo '[global]\ndevice = gpu\nfloatX = float32' > $HOME/.theanorc
+
+WORKDIR $HOME/DeepCell/keras_version
+
+CMD jupyter notebook --port 9999 --no-browser --ip=*
