@@ -52,14 +52,24 @@ RUN CONFIGURE_OPTS=--enable-shared pyenv install 2.7.4
 
 RUN pyenv global 2.7.4
 
+# Install deep learning packages
 RUN pip install numpy
 RUN pip install scipy
 RUN pip install scikit-learn scikit-image matplotlib palettable libtiff tifffile h5py ipython[all]
-RUN pip install --upgrade --no-deps git+git://github.com/Theano/Theano.git
-RUN pip install keras pywavelets mahotas
 
+# The code will no longer get the bleeding-edge (dev) version of Theano, since using
+# versions newer than the ones used when the DeepCell docker image was checked in introduced
+# errors when the code was run. This is because later versions of Theano/Keras deprecated the
+# old CUDA backend in favor of the new GPUArray backend, which requires some code change.
+# Therefore, we will get the older Theano and Keras versions that are compatible with the
+# code until we are ready for the GPUArray backend
+#RUN pip install --upgrade --no-deps git+git://github.com/Theano/Theano.git
+RUN pip install theano==0.9.0 keras==1.1.0 pywavelets mahotas
+
+# Set up Keras environment
 RUN mkdir $HOME/.keras && echo '{"image_dim_ordering": "th", "epsilon": 1e-07, "floatx": "float32", "backend": "theano"}' >> $HOME/.keras/keras.json
 
+# Set up Theano environment
 RUN echo '[global]\ndevice = gpu\nfloatX = float32' > $HOME/.theanorc
 
 # Set up notebook config
