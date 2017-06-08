@@ -16,9 +16,6 @@ c.NotebookApp.port = 8888
 #  configuration option.
 c.NotebookApp.open_browser = False
 
-## Whether to allow the user to run the notebook as root.
-c.NotebookApp.allow_root = True
-
 #------------------------------------------------------------------------------
 # FileContentsManager(FileManagerMixin,ContentsManager) configuration
 #------------------------------------------------------------------------------
