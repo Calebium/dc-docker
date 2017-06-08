@@ -45,7 +45,7 @@ ARG GID
 
 #WORKDIR $HOME
 
-# Added pip to the list of packages for upgrading since there were intermittent failures
+# Add pip to the list of packages for upgrading since there were intermittent failures
 # when installing libtiff (ImportError: No module named six)
 RUN apt-get -y update && apt-get install -y python-pip git curl g++ make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev
 
@@ -81,10 +81,10 @@ RUN CONFIGURE_OPTS=--enable-shared pyenv install 2.7.4
 
 RUN pyenv global 2.7.4
 
-# Install deep learning packages
+# Install deep learning packages (add jupyter-console)
 RUN pip install numpy
 RUN pip install scipy
-RUN pip install scikit-learn scikit-image matplotlib palettable libtiff tifffile h5py ipython[all]
+RUN pip install scikit-learn scikit-image matplotlib palettable libtiff tifffile h5py ipython[all] jupyter-console
 
 # The code will no longer get the bleeding-edge (dev) version of Theano, since using
 # versions newer than the ones used when the DeepCell docker image was checked in introduced
