@@ -14,6 +14,10 @@
 #     Jupyter opens up the HTTP port for world access without the
 #     requirement for tokens or passwords, creating a security risk
 #     (e.g. from crypto mining)
+# (4) Create a Docker user with the same UID and GID as the host user
+#     that is building/running the container. This is to get around
+#     the problem with file permissions in shared volumes where all
+#     files are owned by root when root is used to run the container
 
 # GitHub:    https://github.com/CovertLab/DeepCell
 #            https://github.com/Calebium/DeepCell
@@ -24,16 +28,41 @@ FROM nvidia/cuda:8.0-cudnn5-devel
 
 LABEL maintainer Caleb Chan
 
-ENV HOME /root
-ENV PYENV_ROOT /root/.pyenv
-ENV PATH /root/.pyenv/shims:/root/.pyenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin
+# Extract info about the host user that is used to build this Docker container. The
+# same user (with the same user name, group name, user ID, and group ID) will be
+# created within the container to facilitate file permission compatibility in the
+# shared volumes when the container is run
+ARG USERNAME
+ARG GROUPNAME
+ARG UID
+ARG GID
 
-WORKDIR $HOME
+# We will no longer add pyenv to the load path of the root user since it will not be
+# the primary user when the Docker container is run
+#ENV HOME /root
+#ENV PYENV_ROOT /root/.pyenv
+#ENV PATH /root/.pyenv/shims:/root/.pyenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin
+
+#WORKDIR $HOME
 
 # Added pip to the list of packages for upgrading since there were intermittent failures
 # when installing libtiff (ImportError: No module named six)
 RUN apt-get -y update && apt-get install -y python-pip git curl g++ make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev
 
+# Create a new user based on the same user on the host that is used to build this
+# Docker container. From this point on all work will be done using this Docker user
+RUN groupadd -r -g $GID $USERNAME && useradd -l -r -m -g $GROUPNAME -u $UID $USERNAME
+USER $USERNAME
+ENV HOME /home/$USERNAME
+WORKDIR /home/$USERNAME
+RUN echo $HOME
+
+# Add pyenv to the load path
+ENV PYENV_ROOT $HOME/.pyenv
+ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin
+RUN echo $PYENV_ROOT && echo $PATH
+
+# pyenv is installed within $PYENV_ROOT
 RUN curl -L https://raw.githubusercontent.com/yyuu/pyenv-installer/master/bin/pyenv-installer | bash
 RUN CONFIGURE_OPTS=--enable-shared pyenv install 2.7.4
 
@@ -73,16 +102,30 @@ RUN mkdir $HOME/.keras && echo '{"image_dim_ordering": "th", "epsilon": 1e-07, "
 RUN echo '[global]\ndevice = gpu\nfloatX = float32' > $HOME/.theanorc
 
 # Set up notebook config
-COPY jupyter_notebook_config.py /root/.jupyter/
+# BUG: For some reason, all ADD and COPY commands in Dockerfiles are executed as root,
+#      regardless of the current user, so any directories/files created will be owned
+#      by root
+COPY jupyter_notebook_config.py $HOME/.jupyter/
+
+# WORKAROUND: To get around the Docker build bug above, we will change the ownership
+#             and group of the directory and everything within back to the Docker user
+#             as root
+USER root
+RUN chown -R $USERNAME:$GROUPNAME /home/$USERNAME/.jupyter/
+
+# Switch back to the Docker user
+USER $USERNAME
+ENV HOME /home/$USERNAME
+WORKDIR /home/$USERNAME
+RUN echo $HOME
 
 # Create symbolic link to point to Jupyter kernels (however, this directory will not be
 # created until Jupyter is run for the first time)
-RUN ln -s /root/.local/share/jupyter/runtime/ jkernels
+RUN ln -s $HOME/.local/share/jupyter/runtime/ jkernels
 
 # Since the code and data will be made available to the docker instance through shared
-# volumes, we will just start at the $HOME directory
+# volumes, we will just start at the $HOME directory as set previously
 #WORKDIR $HOME/DeepCell/keras_version
-WORKDIR $HOME
 
 # Instead of launching the Jupyter notebook every time we start the docker instance, we
 # simply launch into a shell, and allow the flexibility of whether to launch the Jupyter
