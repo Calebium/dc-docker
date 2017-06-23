@@ -65,7 +65,8 @@ def script_post_save(model, os_path, contents_manager, **kwargs):
     base, ext = os.path.splitext(os_path)
     py_fname = base + '.py'
     script, resources = _script_exporter.from_filename(os_path)
-    script_fname = base + resources.get('output_extension', '.txt')
+    script_fname = base + resources.get('output_extension', '.txt')  # If the script exporter can figure out the extension, use it.
+                                                                     # Otherwise, default to .txt
     log.info("Saving script /%s", to_api_path(script_fname, contents_manager.root_dir))
 
     with io.open(script_fname, 'w', encoding='utf-8') as f:
